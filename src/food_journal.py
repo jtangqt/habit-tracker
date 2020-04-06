@@ -1,13 +1,14 @@
 from datetime import datetime, timedelta
 import json
 import psycopg2
+from collections import namedtuple
 
 from postgres import start_connection, close_connection
 
 BREAKFAST = "Breakfast"
 LUNCH = "Lunch"
 DINNER = "Dinner"
-SNACKS = "Snack"
+SNACK = "Snack"
 MIDNIGHTSNACK = "Midnight Snack"
 
 class food:
@@ -20,8 +21,8 @@ class journal_entry:
         self.breakfast = {"name": BREAKFAST, "entries": []}
         self.lunch = {"name": LUNCH, "entries": []}
         self.dinner = {"name": DINNER, "entries": []}
-        self.snacks = {"name": SNACKS, "entries": []}
-        self.midnight_snacks = {"name": MIDNIGHTSNACK, "entries": []}
+        self.snack = {"name": SNACK, "entries": []}
+        self.midnight_snack = {"name": MIDNIGHTSNACK, "entries": []}
     def update_meal(self, meal_type, food_entries):
         meal = self.meal_name_to_journal_entry(meal_type)
         meal['entries'].extend(food_entries)
@@ -30,15 +31,21 @@ class journal_entry:
             BREAKFAST: self.breakfast,
             LUNCH: self.lunch,
             DINNER: self.dinner,
-            SNACKS: self.snacks,
-            MIDNIGHTSNACK: self.midnight_snacks,
+            SNACK: self.snack,
+            MIDNIGHTSNACK: self.midnight_snack,
         }
         return switcher.get(meal_type, "Invalid meal type")
     def toJSON(self):
         return json.dumps(self, default=lambda o: o.__dict__,
                           sort_keys=True, indent=4)
+    def unpack(self, record):
+        self.breakfast = record['breakfast']
+        self.lunch = record['lunch']
+        self.dinner = record['dinner']
+        self.snack = record['snack']
+        self.midnight_snack = record['midnight_snack']
 
-def insert_new_journal_entry(journal_entry, date):
+def insert_new_journal_entry(date, journal_entry):
     connection, err = start_connection()
     if err is not None:
         return err
@@ -56,27 +63,55 @@ def insert_new_journal_entry(journal_entry, date):
         cursor.execute(insert_entry, data)
         connection.commit()
         count = cursor.rowcount
-        print (count, "Info: Record inserted successfully into mobile table")
+        print (count, "Info: Record inserted successfully into table")
     except (Exception, psycopg2.Error) as error:
         return error
     close_connection(connection)
     return None
 
-def get_journal_entry(dates):
-    return dates
+def get_journal_entry(date, meal):
+    return date
 
-def update_journal_entry():
-    return 0
+def update_journal_entry(date, meal, food_entries):
+    connection, err = start_connection()
+    if err is not None:
+        return err
+    try:
+        cursor = connection.cursor()
+        query = "select * from food_journal where date = %s"
+        cursor.execute(query, (date, ))
+        record = cursor.fetchone()
+        if record is None:
+            raise Exception("Error: record for date {} does not exist".format(date))
+        existing_entry = journal_entry()
+        existing_entry.unpack(record[2])
+        new_entry = existing_entry
+        new_entry.update_meal(meal, food_entries)
+        update_entry = "update food_journal set data =  %s where date = %s"
+        data = (new_entry.toJSON(), date)
+        cursor.execute(update_entry, data)
+        connection.commit()
+        count = cursor.rowcount
+        print("Info: {} Record updated successfully".format(count))
+    except (Exception, psycopg2.Error) as error:
+        return error
+    close_connection(connection)
+    return None
 
 def delete_journal_entry(date):
     return 0
 
 #todo determine what to do with weight
 
-
-
-journal_entry = journal_entry()
-meal_entry = food("coffee", 3)
-journal_entry.update_meal(BREAKFAST, [meal_entry])
-date = datetime.date(datetime.now())
-err = insert_new_journal_entry(journal_entry, date)
+if __name__ == "__main__":
+    entry = journal_entry()
+    food_1 = food("coffee", 8)
+    food_2 = food("bagel", 300)
+    date = datetime.date(datetime.now()) - timedelta(days = 1)
+    entry.update_meal(DINNER, [food_1])
+    # err = insert_new_journal_entry(date, entry)
+    # if err is not  None:
+    #    print("{}".format(err))
+    err = update_journal_entry(date, BREAKFAST, [food_1, food_2])
+    if err is not None:
+        print("{}".format(err))

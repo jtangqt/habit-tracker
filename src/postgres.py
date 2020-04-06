@@ -10,7 +10,7 @@ def start_connection(user="jtangqt", password=""):
                                       database = "postgres")
 
         # Print PostgreSQL Connection properties
-        print ( connection.get_dsn_parameters(),"\n")
+        print ( "Info: ", connection.get_dsn_parameters())
 
         # Print PostgreSQL version
         return connection, None
