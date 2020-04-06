@@ -69,8 +69,24 @@ def insert_new_journal_entry(date, journal_entry):
     close_connection(connection)
     return None
 
-def get_journal_entry(date, meal):
-    return date
+def get_journal_entry(date):
+    connection, err = start_connection()
+    if err is not None:
+        return None, err
+    try:
+        cursor = connection.cursor()
+        query = "select * from food_journal where date = %s"
+        cursor.execute(query, (date, ))
+        record = cursor.fetchone()
+        if record is None:
+            raise Exception("Error: record for date {} does not exist".format(date))
+        entry = journal_entry()
+        entry.unpack(record[2])
+        print("Info: Got 1 record successfully")
+    except (Exception, psycopg2.Error) as error:
+        return None, error
+    close_connection(connection)
+    return entry, None
 
 def update_journal_entry(date, meal, food_entries):
     connection, err = start_connection()
@@ -109,9 +125,16 @@ if __name__ == "__main__":
     food_2 = food("bagel", 300)
     date = datetime.date(datetime.now()) - timedelta(days = 1)
     entry.update_meal(DINNER, [food_1])
+    ## insert
     # err = insert_new_journal_entry(date, entry)
     # if err is not  None:
     #    print("{}".format(err))
-    err = update_journal_entry(date, BREAKFAST, [food_1, food_2])
+    ## update
+    # err = update_journal_entry(date, BREAKFAST, [food_1, food_2])
+    # if err is not None:
+    #     print("{}".format(err))
+    ## read
+    entry, err = get_journal_entry(date)
     if err is not None:
         print("{}".format(err))
+    print(entry.breakfast)
