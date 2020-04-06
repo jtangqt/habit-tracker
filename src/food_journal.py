@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 import json
 import psycopg2
-from collections import namedtuple
 
 from postgres import start_connection, close_connection
 
@@ -34,7 +33,7 @@ class journal_entry:
             SNACK: self.snack,
             MIDNIGHTSNACK: self.midnight_snack,
         }
-        return switcher.get(meal_type, "Invalid meal type")
+        return switcher.get(meal_type, "Error: invalid meal type")
     def toJSON(self):
         return json.dumps(self, default=lambda o: o.__dict__,
                           sort_keys=True, indent=4)
@@ -63,7 +62,7 @@ def insert_new_journal_entry(date, journal_entry):
         cursor.execute(insert_entry, data)
         connection.commit()
         count = cursor.rowcount
-        print (count, "Info: Record inserted successfully into table")
+        print ("Info: {} record inserted successfully into table".format(count))
     except (Exception, psycopg2.Error) as error:
         return error
     close_connection(connection)
@@ -82,7 +81,7 @@ def get_journal_entry(date):
             raise Exception("Error: record for date {} does not exist".format(date))
         entry = journal_entry()
         entry.unpack(record[2])
-        print("Info: Got 1 record successfully")
+        print("Info: got 1 record successfully")
     except (Exception, psycopg2.Error) as error:
         return None, error
     close_connection(connection)
@@ -108,14 +107,37 @@ def update_journal_entry(date, meal, food_entries):
         cursor.execute(update_entry, data)
         connection.commit()
         count = cursor.rowcount
-        print("Info: {} Record updated successfully".format(count))
+        print("Info: {} record updated successfully".format(count))
     except (Exception, psycopg2.Error) as error:
         return error
     close_connection(connection)
     return None
 
 def delete_journal_entry(date):
-    return 0
+    connection, err = start_connection()
+    if err is not None:
+        return err
+    try:
+        cursor = connection.cursor()
+        query = "select * from food_journal where date = %s"
+        cursor.execute(query, (date, ))
+        record = cursor.fetchone()
+        if record is None:
+            raise Exception("Error: record for date {} does not exist".format(date))
+        ans = input("\nAre you sure you want to delete entry {} for date: {}:\n{}\n(Y/n) ".format(record[0], record[1], record[2]))
+        if ans == "Y":
+            query = "delete from food_journal where id = %s"
+            id = record[0]
+            cursor.execute(query, (id, ))
+            connection.commit()
+            count = cursor.rowcount
+            print("Info: {} record deleted successfully ".format(count))
+        else:
+            print("Info: user cancelled delete for entry {}".format(record[0]))
+    except (Exception, psycopg2.Error) as error:
+        return error
+    close_connection(connection)
+    return None
 
 #todo determine what to do with weight
 
@@ -125,16 +147,24 @@ if __name__ == "__main__":
     food_2 = food("bagel", 300)
     date = datetime.date(datetime.now()) - timedelta(days = 1)
     entry.update_meal(DINNER, [food_1])
+
     ## insert
-    # err = insert_new_journal_entry(date, entry)
-    # if err is not  None:
-    #    print("{}".format(err))
+    err = insert_new_journal_entry(date, entry)
+    if err is not  None:
+       print("{}".format(err))
+
     ## update
-    # err = update_journal_entry(date, BREAKFAST, [food_1, food_2])
-    # if err is not None:
-    #     print("{}".format(err))
+    err = update_journal_entry(date, BREAKFAST, [food_1, food_2])
+    if err is not None:
+        print("{}".format(err))
+
     ## read
     entry, err = get_journal_entry(date)
     if err is not None:
         print("{}".format(err))
     print(entry.breakfast)
+
+    ## delete
+    err = delete_journal_entry(date)
+    if err is not None:
+        print("{}".format(err))
