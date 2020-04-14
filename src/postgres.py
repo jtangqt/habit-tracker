@@ -40,7 +40,10 @@ def with_postgres_connection(func):
             ret = func(cursor, *args, **kwargs)
             connection.commit()
             count = cursor.rowcount
-            print ("Info: {} record successfully {}".format(count, args[-1]))
+            if count > 0:
+                successful_operation = func.__defaults__[-2]
+                table_name = func.__defaults__[-1]
+                print ("Info: {} record successfully {} in {}".format(count, successful_operation, table_name))
         except (Exception, psycopg2.Error) as error:
             return error
         finally:
