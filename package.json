@@ -1,0 +1,22 @@
+{
+  "name": "habits_tracker",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/react": "^16.9.32",
+    "@types/react-dom": "^16.9.6",
+    "install": "^0.13.0",
+    "react": "^16.13.1",
+    "typescript": "^3.8.3"
+  },
+  "dependencies": {
+    "postgres": "^1.0.2",
+    "react-dom": "^16.13.1"
+  }
+}
