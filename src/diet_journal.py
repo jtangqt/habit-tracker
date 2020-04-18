@@ -7,7 +7,7 @@ from postgres import with_postgres_connection
 
 class NoValue(Enum):
     def __repr__(self):
-        return '%s' % self.value
+        return "%s".format(self.value)
 
 
 class Food:
@@ -49,7 +49,7 @@ class JournalEntry():
         self.entries_by_meal_type[meal_type].extend(food_entries)
 
     def to_json(self):
-        return json.dumps(self.entries_by_meal_type, default=lambda o: o.__dict__, indent=4)
+        return json.dumps(self.entries_by_meal_type, default=lambda o: o.__dict__)
 
     def unpack_json(self, record):
         try:
@@ -71,7 +71,7 @@ class Measurements():
             BodyType.NECK: None,
         }
     def to_json(self):
-        return json.dumps(self.measurements, default=lambda o: o.__dict__, indent=4)
+        return json.dumps(self.measurements, default=lambda o: o.__dict__)
 
     def unpack_json(self, record):
         try:
@@ -98,7 +98,7 @@ class DietEntry():
 
 
 @with_postgres_connection
-def insert(cursor, date, operation_name="inserted", table_name="diet_journal"):
+def insert_row_if_not_empty(cursor, date, operation_name="inserted", table_name="diet_journal"):
     query = 'select * from diet_journal where date = %s'
     cursor.execute(query, (date,))
     record = cursor.fetchone()
@@ -109,7 +109,7 @@ def insert(cursor, date, operation_name="inserted", table_name="diet_journal"):
 
 
 @with_postgres_connection
-def find(cursor, date, operation_name="found", table_name="diet_journal"):
+def find_diet_entry_for_date(cursor, date, operation_name="found", table_name="diet_journal"):
     try:
         query = 'select * from diet_journal where date = %s'
         cursor.execute(query, (date,))
@@ -122,9 +122,9 @@ def find(cursor, date, operation_name="found", table_name="diet_journal"):
 
 
 @with_postgres_connection
-def update(cursor, date, entries: DietEntry, operation_name="updated", table_name="diet_journal"):
+def update_diet_entry_for_date(cursor, date, entries: DietEntry, operation_name="updated", table_name="diet_journal"):
     update_entry = 'update diet_journal ' \
-                   'set data = %s, "Weight (kg)" = %s, "Measurements" = %s, "Fasting Start Time" = %s ' \
+                   'set "Food Journal" = %s, "Weight (kg)" = %s, "Measurements" = %s, "Fasting Start Time" = %s ' \
                    'where date = %s'
     data = (
     entries.journal_entry.to_json(), entries.weight, entries.measurements.to_json(), entries.fasting_start_time, date)
@@ -132,19 +132,17 @@ def update(cursor, date, entries: DietEntry, operation_name="updated", table_nam
 
 
 @with_postgres_connection
-def delete(cursor, id, operation_name="deleted", table_name="diet_journal"):
+def delete_diet_entry_for_date(cursor, id, operation_name="deleted", table_name="diet_journal"):
     query = 'delete from diet_journal where id = %s'
     cursor.execute(query, (id,))
 
 
 def insert_diet_entry(date):
-    err = insert(date)
-    if err is not None:
-        return err
+    return insert_row_if_not_empty(date)
 
 
 def get_diet_entry(date):
-    record, err = find(date)
+    record, err = find_diet_entry_for_date(date)
     if err is not None:
         return None, err
     diet_entry = DietEntry()
@@ -154,7 +152,7 @@ def get_diet_entry(date):
 
 
 def delete_diet_entry(date):
-    record, err = find(date)
+    record, err = find_diet_entry_for_date(date)
     if err is not None:
         return err
 
@@ -165,31 +163,31 @@ def delete_diet_entry(date):
         "Fasting Start Time: {}\n".format(record[5]) +
         "Measurements: {}\n(Y/n)".format(record[4]))
     if ans == "Y":
-        return delete(record[0])
+        return delete_diet_entry_for_date(record[0])
     else:
         print("Info: user cancelled delete for entry {}".format(record[0]))
     return None
 
 
 def update_food_entry(date, meal, food_entries):
-    record, err = find(date)
+    record, err = find_diet_entry_for_date(date)
     if err is not None:
         return err
     diet_entry = DietEntry()
     diet_entry.unpack_records(record)
     diet_entry.journal_entry.update_meal(meal, food_entries)
-    return update(date, diet_entry)
+    return update_diet_entry_for_date(date, diet_entry)
 
 
 def update_weight_entry(date, weight):
-    record, err = find(date)
+    record, err = find_diet_entry_for_date(date)
     if err is not None:
         return err
     diet_entry = DietEntry()
     diet_entry.unpack_records(record)
     if diet_entry.weight != weight:
         diet_entry.weight = weight
-        return update(date, diet_entry)
+        return update_diet_entry_for_date(date, diet_entry)
     print("Info: not updating since weight is the same")
     return None
 
