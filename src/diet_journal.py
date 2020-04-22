@@ -86,15 +86,17 @@ class DietEntry():
         self.fasting_start_time = None
         self.weight = None
         self.measurements = Measurements()
+        self.water = 0
     def unpack_records(self, record):
         food_entry = JournalEntry()
         measurements = Measurements()
-        food_entry.unpack_json(record[2])
-        measurements.unpack_json(record[4])
+        food_entry.unpack_json(record[1])
+        measurements.unpack_json(record[3])
         self.journal_entry = food_entry
         self.measurements = measurements
-        self.weight = record[3]
-        self.fasting_start_time = record[5]
+        self.weight = record[2]
+        self.fasting_start_time = record[4]
+        self.water = record[5]
 
 
 @with_postgres_connection
@@ -132,9 +134,9 @@ def update_diet_entry_for_date(cursor, date, entries: DietEntry, operation_name=
 
 
 @with_postgres_connection
-def delete_diet_entry_for_date(cursor, id, operation_name="deleted", table_name="diet_journal"):
-    query = 'delete from diet_journal where id = %s'
-    cursor.execute(query, (id,))
+def delete_diet_entry_for_date(cursor, date, operation_name="deleted", table_name="diet_journal"):
+    query = 'delete from diet_journal where date = %s'
+    cursor.execute(query, (date,))
 
 
 def insert_diet_entry(date):
@@ -157,15 +159,16 @@ def delete_diet_entry(date):
         return err
 
     ans = input(
-        "\nAre you sure you want to delete entry {} for date: {}:\n".format(record[0], record[1]) +
-        "Food Journal: {}\n".format(record[2]) +
-        "Weight: {}\n".format(record[3]) +
-        "Fasting Start Time: {}\n".format(record[5]) +
-        "Measurements: {}\n(Y/n)".format(record[4]))
+        "\nAre you sure you want to delete entry for date: {}:\n".format(record[0]) +
+        "Food Journal: {}\n".format(record[1]) +
+        "Weight: {}\n".format(record[2]) +
+        "Measurements: {}\n".format(record[3]) +
+        "Fasting Start Time: {}\n".format(record[4]) +
+        "Water: {}\n(Y/n)".format(record[5]))
     if ans == "Y":
-        return delete_diet_entry_for_date(record[0])
+        return delete_diet_entry_for_date(date)
     else:
-        print("Info: user cancelled delete for entry {}".format(record[0]))
+        print("Info: user cancelled delete entry for date {}".format(record[0]))
     return None
 
 
