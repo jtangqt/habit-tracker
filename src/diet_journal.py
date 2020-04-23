@@ -102,12 +102,12 @@ class Exercise():
             self.exercise.update(record)
         except:
             print("Info: no exercise for this day")
+
     def update_with_new_if_not_none(self, minutes, accomplishments):
         if minutes:
             self.exercise["minutes"] = minutes
         if accomplishments != "":
             self.exercise["accomplishments"] = accomplishments
-
 
 
 class DietEntry():
@@ -261,6 +261,7 @@ def update_measurements_for_date(date, measurements):
     existing_measurements.update_with_new_if_not_none(measurements)
     return update_diet_entry_for_date(date, diet_entry)
 
+
 def update_increased_water_intake(date, cups):
     record, err = find_diet_entry_for_date(date)
     if err is not None:
@@ -270,8 +271,10 @@ def update_increased_water_intake(date, cups):
     diet_entry.water += cups
     return update_diet_entry_for_date(date, diet_entry)
 
+
 def update_increased_water_intake_by_one_cup(date):
     return update_increased_water_intake(date, 1)
+
 
 def update_water_total_cups_for_date(date, cups):
     record, err = find_diet_entry_for_date(date)
@@ -282,6 +285,7 @@ def update_water_total_cups_for_date(date, cups):
     diet_entry.water = cups
     return update_diet_entry_for_date(date, diet_entry)
 
+
 def update_exercise_for_date(date, minutes, accomplishments=""):
     record, err = find_diet_entry_for_date(date)
     if err is not None:
@@ -290,6 +294,7 @@ def update_exercise_for_date(date, minutes, accomplishments=""):
     diet_entry.unpack_records(record)
     diet_entry.exercise.update_with_new_if_not_none(minutes, accomplishments)
     return update_diet_entry_for_date(date, diet_entry)
+
 
 if __name__ == "__main__":
     entry = JournalEntry()
