@@ -4,6 +4,7 @@ import json
 import pytz
 
 from postgres import with_postgres_connection
+from json_record import JSONRecord
 
 
 class NoValue(Enum):
@@ -59,9 +60,10 @@ class JournalEntry():
             print("Info: no meals for this day")
 
 
-class Measurements():
-    def __init__(self):
-        self.entries_for_body_type = {
+class Measurements(JSONRecord):
+    def __init__(self, data_model):
+        super().__init__(data_model)
+        self.data_model = {
             BodyType.HIPS: None,
             BodyType.WAIST: None,
             BodyType.BUST: None,
@@ -72,14 +74,6 @@ class Measurements():
             BodyType.NECK: None,
         }
 
-    def to_json(self):
-        return json.dumps(self.entries_for_body_type, default=lambda o: o.__dict__)
-
-    def unpack_json(self, record):
-        try:
-            self.entries_for_body_type.update(record)
-        except:
-            print("Info: no measurements for this day")
 
     def update_with_new_if_not_none(self, new_record):
         for body_type in self.entries_for_body_type:
