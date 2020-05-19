@@ -37,7 +37,7 @@ class BodyType(str, NoValue):
     NECK = 'Neck'
 
 
-class JournalEntry():
+class JournalEntry(JSONRecord):
     def __init__(self):
         self.entries_by_meal_type = {
             MealType.BREAKFAST: [],
@@ -46,24 +46,15 @@ class JournalEntry():
             MealType.SNACK: [],
             MealType.MIDNIGHTSNACK: [],
         }
+        super().__init__(self.entries_by_meal_type)
 
     def update_meal(self, meal_type, food_entries):
         self.entries_by_meal_type[meal_type].extend(food_entries)
 
-    def to_json(self):
-        return json.dumps(self.entries_by_meal_type, default=lambda o: o.__dict__)
-
-    def unpack_json(self, record):
-        try:
-            self.entries_by_meal_type.update(record)
-        except:
-            print("Info: no meals for this day")
-
 
 class Measurements(JSONRecord):
-    def __init__(self, data_model):
-        super().__init__(data_model)
-        self.data_model = {
+    def __init__(self):
+        self.entries_for_body_type = {
             BodyType.HIPS: None,
             BodyType.WAIST: None,
             BodyType.BUST: None,
@@ -73,7 +64,7 @@ class Measurements(JSONRecord):
             BodyType.RIGHTTHIGH: None,
             BodyType.NECK: None,
         }
-
+        super().__init__(self.entries_for_body_type)
 
     def update_with_new_if_not_none(self, new_record):
         for body_type in self.entries_for_body_type:
@@ -302,7 +293,7 @@ if __name__ == "__main__":
     if err is not None:
         print("{}".format(err))
 
-    # update food
+    ## update food
     err = update_food_entry_for_date(date, MealType.BREAKFAST, [food_1, food_2])
     if err is not None:
         print("{}".format(err))
@@ -314,8 +305,8 @@ if __name__ == "__main__":
 
     ## update fasting start time
     fasting_start_time = datetime(date.year, date.month, date.day, hour=22, minute=33)
-    # timezone = pytz.timezone("America/New_York")
-    timezone = pytz.timezone("America/Los_Angeles")
+    timezone = pytz.timezone("America/New_York")
+    # timezone = pytz.timezone("America/Los_Angeles")
     err = update_fasting_start_time_for_date(date, fasting_start_time, timezone)
     if err is not None:
         print("{}".format(err))

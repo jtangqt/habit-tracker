@@ -1,3 +1,4 @@
+import json
 
 class JSONRecord():
     def __init__(self, data_model):
