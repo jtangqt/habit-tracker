@@ -1,15 +1,9 @@
 from datetime import datetime, timedelta, time, date
-from enum import Enum
-import json
 import pytz
 
+from enum_helper import NoValue
 from postgres import with_postgres_connection
 from json_record import JSONRecord
-
-
-class NoValue(Enum):
-    def __repr__(self):
-        return "%s".format(self.value)
 
 
 class Food:
@@ -72,21 +66,13 @@ class Measurements(JSONRecord):
                 self.entries_for_body_type[body_type] = new_record.entries_for_body_type[body_type]
 
 
-class Exercise():
+class Exercise(JSONRecord):
     def __init__(self):
         self.exercise = {
             "minutes": 0,
             "accomplishments": ""
         }
-
-    def to_json(self):
-        return json.dumps(self.exercise, default=lambda o: o.__dict__)
-
-    def unpack_json(self, record):
-        try:
-            self.exercise.update(record)
-        except:
-            print("Info: no exercise for this day")
+        super().__init__(self.exercise)
 
     def update_with_new_if_not_none(self, minutes, accomplishments):
         if minutes:
@@ -105,22 +91,16 @@ class DietEntry():
         self.exercise = Exercise()
 
     def unpack_records(self, record):
-        food_entry = JournalEntry()
-        measurements = Measurements()
-        exercise = Exercise()
-        food_entry.unpack_json(record[1])
-        measurements.unpack_json(record[3])
-        exercise.unpack_json(record[6])
-        self.journal_entry = food_entry
-        self.measurements = measurements
+        self.journal_entry.unpack_json(record[1])
+        self.measurements.unpack_json(record[3])
         self.weight = record[2]
         self.fasting_start_time = record[4]
         self.water = record[5]
-        self.exercise = exercise
+        self.exercise.unpack_json(record[6])
 
 
 @with_postgres_connection
-def insert_row_if_not_empty(cursor, date, operation_name="inserted", table_name="diet_journal"):
+def insert_row_if_not_empty(cursor, date, operation_name="insert", table_name="diet_journal"):
     query = 'select * from diet_journal where date = %s'
     cursor.execute(query, (date,))
     record = cursor.fetchone()
@@ -178,41 +158,36 @@ def get_diet_entry(date):
 
 
 def delete_diet_entry(date):
-    record, err = find_diet_entry_for_date(date)
+    diet_entry, err = get_diet_entry(date)
     if err is not None:
         return err
-
     ans = input(
-        "\nAre you sure you want to delete entry for date: {}:\n".format(record[0]) +
-        "Food Journal: {}\n".format(record[1]) +
-        "Weight: {}\n".format(record[2]) +
-        "Measurements: {}\n".format(record[3]) +
-        "Fasting Start Time: {}\n".format(record[4]) +
-        "Water: {}\n".format(record[5]) +
-        "Exercise: {}\n(Y/n)".format(record[6]))
+        "\nAre you sure you want to delete entry for date: {}:\n".format(date) +
+        "Food Journal: {}\n".format(diet_entry.journal_entry) +
+        "Weight: {}\n".format(diet_entry.weight) +
+        "Measurements: {}\n".format(diet_entry.measurements) +
+        "Fasting Start Time: {}\n".format(diet_entry.fasting_start_time) +
+        "Water: {}\n".format(diet_entry.water) +
+        "Exercise: {}\n(Y/n)".format(diet_entry.exercise))
     if ans == "Y":
         return delete_diet_entry_for_date(date)
     else:
-        print("Info: user cancelled delete entry for date {}".format(record[0]))
+        print("Info: user cancelled delete entry for date {}".format(date))
     return None
 
 
 def update_food_entry_for_date(date, meal, food_entries):
-    record, err = find_diet_entry_for_date(date)
+    diet_entry, err = get_diet_entry(date)
     if err is not None:
         return err
-    diet_entry = DietEntry()
-    diet_entry.unpack_records(record)
     diet_entry.journal_entry.update_meal(meal, food_entries)
     return update_diet_entry_for_date(date, diet_entry)
 
 
 def update_weight_entry_for_date(date, weight):
-    record, err = find_diet_entry_for_date(date)
+    diet_entry, err = get_diet_entry(date)
     if err is not None:
         return err
-    diet_entry = DietEntry()
-    diet_entry.unpack_records(record)
     if diet_entry.weight != weight:
         diet_entry.weight = weight
         return update_diet_entry_for_date(date, diet_entry)
@@ -221,12 +196,10 @@ def update_weight_entry_for_date(date, weight):
 
 
 def update_fasting_start_time_for_date(date, fasting_start_time, timezone):
-    time_with_timezone = timezone.localize(fasting_start_time)
-    record, err = find_diet_entry_for_date(date)
+    diet_entry, err = get_diet_entry(date)
     if err is not None:
         return err
-    diet_entry = DietEntry()
-    diet_entry.unpack_records(record)
+    time_with_timezone = timezone.localize(fasting_start_time)
     if diet_entry.fasting_start_time != None:
         print(
             "Info: changing fasting start time from {} to {}".format(diet_entry.fasting_start_time, time_with_timezone))
@@ -237,22 +210,18 @@ def update_fasting_start_time_for_date(date, fasting_start_time, timezone):
 
 
 def update_measurements_for_date(date, measurements):
-    record, err = find_diet_entry_for_date(date)
+    diet_entry, err = get_diet_entry(date)
     if err is not None:
         return err
-    diet_entry = DietEntry()
-    diet_entry.unpack_records(record)
     existing_measurements = diet_entry.measurements
     existing_measurements.update_with_new_if_not_none(measurements)
     return update_diet_entry_for_date(date, diet_entry)
 
 
 def update_increased_water_intake(date, cups):
-    record, err = find_diet_entry_for_date(date)
+    diet_entry, err = get_diet_entry(date)
     if err is not None:
         return err
-    diet_entry = DietEntry()
-    diet_entry.unpack_records(record)
     diet_entry.water += cups
     return update_diet_entry_for_date(date, diet_entry)
 
@@ -262,21 +231,17 @@ def update_increased_water_intake_by_one_cup(date):
 
 
 def update_water_total_cups_for_date(date, cups):
-    record, err = find_diet_entry_for_date(date)
+    diet_entry, err = get_diet_entry(date)
     if err is not None:
         return err
-    diet_entry = DietEntry()
-    diet_entry.unpack_records(record)
     diet_entry.water = cups
     return update_diet_entry_for_date(date, diet_entry)
 
 
 def update_exercise_for_date(date, minutes, accomplishments=""):
-    record, err = find_diet_entry_for_date(date)
+    diet_entry, err = get_diet_entry(date)
     if err is not None:
         return err
-    diet_entry = DietEntry()
-    diet_entry.unpack_records(record)
     diet_entry.exercise.update_with_new_if_not_none(minutes, accomplishments)
     return update_diet_entry_for_date(date, diet_entry)
 
