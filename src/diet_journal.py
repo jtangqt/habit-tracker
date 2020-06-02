@@ -1,15 +1,9 @@
 from datetime import datetime, timedelta, time, date
-from enum import Enum
-import json
 import pytz
 
+from enum_helper import NoValue
 from postgres import with_postgres_connection
 from json_record import JSONRecord
-
-
-class NoValue(Enum):
-    def __repr__(self):
-        return "%s".format(self.value)
 
 
 class Food:
@@ -72,21 +66,13 @@ class Measurements(JSONRecord):
                 self.entries_for_body_type[body_type] = new_record.entries_for_body_type[body_type]
 
 
-class Exercise():
+class Exercise(JSONRecord):
     def __init__(self):
         self.exercise = {
             "minutes": 0,
             "accomplishments": ""
         }
-
-    def to_json(self):
-        return json.dumps(self.exercise, default=lambda o: o.__dict__)
-
-    def unpack_json(self, record):
-        try:
-            self.exercise.update(record)
-        except:
-            print("Info: no exercise for this day")
+        super().__init__(self.exercise)
 
     def update_with_new_if_not_none(self, minutes, accomplishments):
         if minutes:

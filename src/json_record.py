@@ -11,4 +11,5 @@ class JSONRecord():
         try:
             self.data_model.update(record)
         except:
-            print("Info: no measurements for this day")
+            print("Info: no child_name for this day")
+            #todo: change to the name of the child
