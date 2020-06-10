@@ -1,4 +1,6 @@
-from datetime import datetime, timedelta, time, date
+import calendar
+from datetime import timedelta, time, date
+import datetime
 import pytz
 
 from enum_helper import XEnum
@@ -6,85 +8,141 @@ from postgres import with_postgres_connection
 from json_record import JSONRecord
 
 
-class DaysOfTheWeek(str, XEnum):
-    MONDAY = 'Monday'
-    TUESDAY = 'Tuesday'
-    WEDNESDAY = 'Wednesday'
-    THURSDAY = 'Thursday'
-    FRIDAY = 'Friday'
-    SATURDAY = 'Saturday'
-    SUNDAY = 'Sunday'
-
-
-class MonthsOfTheYear(str, XEnum):
-    JANUARY = 'January'
-    FEBRUARY = 'February'
-    MARCH = 'March'
-    APRIL = 'April'
-    MAY = 'May'
-    JUNE = 'June'
-    JULY = 'July'
-    AUGUST = 'August'
-    SEPTEMBER = 'September'
-    OCTOBER = 'October'
-    NOVEMBER = 'November'
-    DECEMBER = 'December'
-
-
-class Goals2020(str, XEnum):
-    JOBS = "Get a job by August"
-    WEIGHT = "Get to 51kg by September"
-    BLOG = "Write at least one article a week in December"
-
-
-class Weekly(JSONRecord):
-    def __init__(self, number=None, days_of_the_week=None):
-        self.weekly_cadence = {
-            "number": number,
-            "days_of_the_week": days_of_the_week
+class Occurrences(JSONRecord):
+    def __init__(self):
+        self.occurrences = {
+            "number": None,  # number of times
+            "dates": []
+            # once -> datetime
+            # yearly -> dates
+            # monthly -> dates & last day of the month
+            # weekly -> day of the week
+            # daily -> None
         }
-        super().__init__(self.weekly_cadence)
-    # todo
+        super().__init__(self.occurrences)
+
+    def update_occurrence(self, number, dates):
+        self.occurrences["number"] = number
+        self.occurrences["dates"] = dates
+
+    def is_numeric_occurrence(self, occurrence):
+        print(type(occurrence[0]))
+        if isinstance(occurrence[0], datetime.date):
+            return False
+        return occurrence[0].isnumeric() and len(occurrence) == 1
+
+    def validate_and_save_once_occurrence(self, occurrences):  # occurrences looks like [datetime]
+        if len(occurrences) > 1 and not isinstance(occurrences[0], datetime.date):
+            return False
+        self.update_occurrence(None, occurrences[0])
+        return True
+
+    def validate_and_save_yearly_occurrence(self, occurrences):
+        if self.is_numeric_occurrence(occurrences):
+            self.update_occurrence(occurrences[0], [])
+            return True
+        else:
+            for date in occurrences:
+                if not isinstance(date, datetime.date):
+                    return False
+            self.update_occurrence(None, occurrences)
+            return True
+
+    def validate_and_save_monthly_occurrence(self, occurrences):
+        if self.is_numeric_occurrence(occurrences):
+            self.update_occurrence(occurrences[0], [])
+            return True
+        else:
+            save_occurrence = []
+            last_day = False
+            for day_of_the_month in occurrences[1:]:
+                if day_of_the_month == "Last Day":
+                    last_day = True
+                elif day_of_the_month <= 31:
+                    save_occurrence.append(day_of_the_month)
+                else:
+                    return False
+            if last_day == True:
+                save_occurrence = ["Last Day"] + save_occurrence
+            self.update_occurrence(None, save_occurrence)
+        return True
+
+    def validate_and_save_weekly_occurrence(self, occurrences):
+        if self.is_numeric_occurrence(occurrences):
+            self.update_occurrence(occurrences[0], [])
+            return True
+        else:
+            week_days_dict = { i : 0 for i in calendar.day_name }
+            for day_of_the_week in occurrences:
+                if day_of_the_week not in week_days_dict:
+                    return False
+            self.update_occurrence(None, occurrences)
+        return True
+
+    def validate_and_save_daily_occurrence(self, occurrences):
+        if len(occurrences) > 0:
+            return False
+        return True
 
 
-class Monthly(JSONRecord):
-    def __init__(self, number=None, days_of_the_month=None):
-        self.monthly_cadence = {
-            "number": number,
-            "days_of_the_month": days_of_the_month
+class Schedule(JSONRecord):
+    def __init__(self):
+        self.schedule_info = {
+            "cadence": "",  # once, yearly, monthly, weekly, daily
+            "occurrences": Occurrences(),
+            "start_date": None,
+            "end_date": None,
+            "due_date": None,
         }
-        super().__init__(self.monthly_cadence)
-    # todo
+        super().__init__(self.schedule_info)
+
+    def validate_occurrence(self, cadence, occurrences):
+        if cadence == "once":
+            if not self.schedule_info["occurrences"].validate_and_save_once_occurrence(occurrences):
+                raise Exception("Error: validate occurrence failed and didn't save for cadence type: once")
+        elif cadence == "yearly":
+            if not self.schedule_info["occurrences"].validate_and_save_yearly_occurrence(occurrences):
+                raise Exception("Error: validate occurrence failed and didn't save for cadence type: yearly")
+        elif cadence == "monthly":
+            if not self.schedule_info["occurrences"].validate_and_save_monthly_occurrence(occurrences):
+                raise Exception("Error: validate occurrence failed and didn't save for cadence type: monthly")
+        elif cadence == "weekly":
+            if not self.schedule_info["occurrences"].validate_and_save_weekly_occurrence(occurrences):
+                raise Exception("Error: validate occurrence failed and didn't save for cadence type: weekly")
+        elif cadence == "daily":
+            if not self.schedule_info["occurrences"].validate_and_save_daily_occurrence(occurrences):
+                raise Exception("Error: validate occurrence failed and didn't save for cadence type: daily")
+        else:
+            raise Exception("Error: cadence does not exist: {}".format(cadence))
+        return None
+
+    def update_schedule(self, cadence, occurrences):
+        err = self.validate_occurrence(cadence, occurrences)
+        if err is not None:
+            return None
+        # todo
 
 
-class Yearly(JSONRecord):
-    def __init__(self, number=None, dates=None):
-        self.yearly_cadence = {
-            "number": number,
-            "dates": dates
+class Project(JSONRecord):
+    def __init__(self):
+        self.project_breakdown = {
+            "project": "",
+            "sub_project": "",
+            "parent_task": None
         }
-        super().__init__(self.yearly_cadence)
+        super().__init__(self.project_breakdown)
     # todo
-
 
 class Task:
     def __init__(self):
         self.idx = None
         self.task_name = None
         self.created_on = None
-        self.start_date = None
-        self.end_date = None
-        self.due_date = None
-        self.once = False
-        self.yearly = Yearly
-        self.monthly = Monthly
-        self.weekly = Weekly()
-        self.daily = False
+        self.schedule = Schedule()
         self.is_complete = {}
         self.task_dependencies = {}
-        self.project = ""
-        self.subproject = ""
-        self.goal = Goals2020
+        self.project = Project()
+        self.goal = ""
         self.habit = False
         self.related_tasks = {}  # this is for future use
         # determine how long it takes to complete related projects/tasks on average
@@ -95,8 +153,12 @@ class Task:
         # questions: how do you enforce one element is one of those types
         for i, key in enumerate(self.__dict__):
             self.__dict__[key] = record[i]
+
     def update(self, task):
-        #todo
+        for i, key in enumerate(self.__dict__):
+            if task.__dict__[key] is not None:
+                self.__dict__[key] = task.__dict__[key]
+        # todo
         return None
 
 
@@ -137,16 +199,10 @@ def find_task_entry_for_task_id(cursor, idx, operation_name="found", table_name=
 def update_task_entry_for_task_id(cursor, idx, entries: Task, operation_name="updated",
                                   table_name="todo_list"):
     update_entry = 'update todo_list ' \
-                   'set task_name = %s, created_on = %s, start_date = %s, end_date = %s, due_date = %s, ' \
-                   'occurence_once = %s, occurence_yearly = %s, occurence_monthly = %s, occurence_weekly = %s, occurence_daily = %s, ' \
-                   'is_complete = %s, task_dependencies = %s, project = %s, subproject = %s, ' \
-                   'goal = %s, habit = %s, related_tasks = %s ' \
+                   'set task_name = %s, created_on = %s, start_date = %s, end_date = %s, due_date = %s ' \
                    'where idx = %s'
     data = (
-        entries.task_name, entries.created_on, entries.start_date, entries.end_date, entries.due_date,
-        entries.once, entries.yearly, entries.monthly, entries.weekly, entries.daily,
-        entries.is_complete, entries.task_dependencies, entries.project, entries.subproject,
-        entries.goal, entries.habit, entries.related_tasks,
+        entries.task_name, entries.created_on, entries.schedule.schedule_info["start_date"], entries.schedule.schedule_info["end_date"], entries.schedule.schedule_info["due_date"],
         idx)
     cursor.execute(update_entry, data)
 
@@ -171,8 +227,9 @@ def get_task_entries(task_name):
     records, err = find_task_entries_for_task_name(task_name)
     if err is not None:
         return None, err
-    print("Info: got {} record successfully".format(len(records)))
+    print("Info: got {} record successfully from task name".format(len(records)))
     return records, None
+
 
 def get_task_entry_by_idx(idx):
     record, err = find_task_entry_for_task_id(idx)
@@ -180,7 +237,7 @@ def get_task_entry_by_idx(idx):
         return None, err
     task_entry = Task()
     task_entry.unpack_records(record)
-    print("Info: got 1 record successfully")
+    print("Info: got 1 record successfully from idx")
     return task_entry, None
 
 
@@ -197,9 +254,9 @@ def update_task_entry(task_name, task: Task):
         items
     )
     if ans in indexes:
-        task_entry = get_task_entry_by_idx(idx)
+        task_entry, _ = get_task_entry_by_idx(int(ans))
         task_entry.update(task)
-        return update_task_entry_for_task_id(int(ans), task)
+        return update_task_entry_for_task_id(int(ans), task_entry)
     else:
         raise Exception("Error: user chose an index that is not present for task name: {}".format(task_name))
 
@@ -229,12 +286,17 @@ def delete_task_entries(task_name):
 
 
 if __name__ == "__main__":
-    weekly = Weekly(days_of_the_week=[DaysOfTheWeek.FRIDAY, DaysOfTheWeek.SATURDAY])
-    if insert_task("leetcode") is not None:
-        print("Error: insert in todo list did not insert properly")
 
     task = Task()
-    task.habit = True
+    today = date.today()
+    err = task.schedule.validate_occurrence("yearly", [today])
+    if err is not None:
+        print("{}".format(err))
+    task.schedule.schedule_info["start_date"] = today
+
+    # # todo: what happens if i postpone a weekly cadence to tomorrow?
+    # if insert_task("leetcode") is not None:
+    #     print("Error: insert in to-do list did not insert properly")
 
     err = update_task_entry("leetcode", task)
     if err is not None:
