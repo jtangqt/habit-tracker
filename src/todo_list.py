@@ -97,30 +97,37 @@ class Schedule(JSONRecord):
         super().__init__(self.schedule_info)
 
     def validate_occurrence(self, cadence, occurrences):
-        if cadence == "once":
-            if not self.schedule_info["occurrences"].validate_and_save_once_occurrence(occurrences):
-                raise Exception("Error: validate occurrence failed and didn't save for cadence type: once")
-        elif cadence == "yearly":
-            if not self.schedule_info["occurrences"].validate_and_save_yearly_occurrence(occurrences):
-                raise Exception("Error: validate occurrence failed and didn't save for cadence type: yearly")
-        elif cadence == "monthly":
-            if not self.schedule_info["occurrences"].validate_and_save_monthly_occurrence(occurrences):
-                raise Exception("Error: validate occurrence failed and didn't save for cadence type: monthly")
-        elif cadence == "weekly":
-            if not self.schedule_info["occurrences"].validate_and_save_weekly_occurrence(occurrences):
-                raise Exception("Error: validate occurrence failed and didn't save for cadence type: weekly")
-        elif cadence == "daily":
-            if not self.schedule_info["occurrences"].validate_and_save_daily_occurrence(occurrences):
-                raise Exception("Error: validate occurrence failed and didn't save for cadence type: daily")
-        else:
-            raise Exception("Error: cadence does not exist: {}".format(cadence))
+        try:
+            if cadence == "once":
+                if not self.schedule_info["occurrences"].validate_and_save_once_occurrence(occurrences):
+                    raise Exception("Error: validate occurrence failed and didn't save for cadence type: once")
+            elif cadence == "yearly":
+                if not self.schedule_info["occurrences"].validate_and_save_yearly_occurrence(occurrences):
+                    raise Exception("Error: validate occurrence failed and didn't save for cadence type: yearly")
+            elif cadence == "monthly":
+                if not self.schedule_info["occurrences"].validate_and_save_monthly_occurrence(occurrences):
+                    raise Exception("Error: validate occurrence failed and didn't save for cadence type: monthly")
+            elif cadence == "weekly":
+                print("here, in weekly ")
+                if not self.schedule_info["occurrences"].validate_and_save_weekly_occurrence(occurrences):
+                    print('returned false')
+                    raise Exception("Error: validate occurrence failed and didn't save for cadence type: weekly")
+            elif cadence == "daily":
+                if not self.schedule_info["occurrences"].validate_and_save_daily_occurrence(occurrences):
+                    raise Exception("Error: validate occurrence failed and didn't save for cadence type: daily")
+            else:
+                raise Exception("Error: cadence does not exist: {}".format(cadence))
+        except Exception as error:
+            return error
         return None
 
     def update_schedule(self, cadence, occurrences):
         err = self.validate_occurrence(cadence, occurrences)
         if err is not None:
-            return None
-        # todo
+            return err
+        self.schedule_info["cadence"] = cadence
+        self.schedule_info["occurrences"] = occurrences
+        # todo update start, end and due date
 
 
 class Project(JSONRecord):
@@ -128,7 +135,6 @@ class Project(JSONRecord):
         self.project_breakdown = {
             "project": "",
             "sub_project": "",
-            "parent_task": None
         }
         super().__init__(self.project_breakdown)
     # todo
@@ -140,6 +146,8 @@ class Task:
         self.created_on = None
         self.schedule = Schedule()
         self.is_complete = {}
+        self.next_occurence = None
+        self.parent_task = None
         self.task_dependencies = {}
         self.project = Project()
         self.goal = ""
@@ -294,15 +302,17 @@ if __name__ == "__main__":
         print("{}".format(err))
     task.schedule.schedule_info["start_date"] = today
 
-    # # todo: what happens if i postpone a weekly cadence to tomorrow?
-    # if insert_task("leetcode") is not None:
-    #     print("Error: insert in to-do list did not insert properly")
+    # todo: what happens if i postpone a weekly cadence to tomorrow?
+    if insert_task("leetcode") is not None:
+        print("Error: insert in to-do list did not insert properly")
 
     err = update_task_entry("leetcode", task)
     if err is not None:
         print("{}".format(err))
 
-    get_task_entries("leetcode")
+    err = task.schedule.update_schedule("weekly", ["Monday"])
+    if err is not None:
+        print("{}".format(err))
 
     deleted_err = delete_task_entries("leetcode")
     if deleted_err is not None:
