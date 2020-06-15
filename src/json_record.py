@@ -1,6 +1,6 @@
 import json
 
-class JSONRecord():
+class JSONRecord:
     def __init__(self, data_model):
         self.data_model = data_model
 

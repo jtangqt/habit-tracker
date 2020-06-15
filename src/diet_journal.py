@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, time, date
 import pytz
 
-from enum_helper import NoValue
+from enum_helper import XEnum
 from postgres import with_postgres_connection
 from json_record import JSONRecord
 
@@ -12,7 +12,7 @@ class Food:
         self.calories = calories
 
 
-class MealType(str, NoValue):
+class MealType(str, XEnum):
     BREAKFAST = 'Breakfast'
     LUNCH = 'Lunch'
     DINNER = 'Dinner'
@@ -20,7 +20,7 @@ class MealType(str, NoValue):
     MIDNIGHTSNACK = 'Midnight Snack'
 
 
-class BodyType(str, NoValue):
+class BodyType(str, XEnum):
     HIPS = 'Hips'
     WAIST = 'Waist'
     BUST = 'Bust'
