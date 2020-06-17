@@ -284,8 +284,8 @@ if __name__ == "__main__":
         print("{}".format(err))
 
     minutes = 2
-    accomplisments = "literally did nothing today"
-    err = update_exercise_for_date(date, minutes, accomplisments)
+    accomplishments = "literally did nothing today"
+    err = update_exercise_for_date(date, minutes, accomplishments)
     if err is not None:
         print("{}".format(err))
 

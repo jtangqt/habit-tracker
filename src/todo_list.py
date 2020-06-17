@@ -8,25 +8,21 @@ from postgres import with_postgres_connection
 from json_record import JSONRecord
 
 
-class Occurrences(JSONRecord):
+class Occurrences:
     def __init__(self):
-        self.occurrences = {
-            "number": None,  # number of times
-            "dates": []
-            # once -> datetime
-            # yearly -> dates
-            # monthly -> dates & last day of the month
-            # weekly -> day of the week
-            # daily -> None
-        }
-        super().__init__(self.occurrences)
+        self.number = None,  # number of times
+        self.dates = []
+        # once -> datetime
+        # yearly -> dates
+        # monthly -> dates & last day of the month
+        # weekly -> day of the week
+        # daily -> None
 
     def update_occurrence(self, number, dates):
-        self.occurrences["number"] = number
-        self.occurrences["dates"] = dates
+        self.number = number
+        self.dates = dates
 
     def is_numeric_occurrence(self, occurrence):
-        print(type(occurrence[0]))
         if isinstance(occurrence[0], datetime.date):
             return False
         return occurrence[0].isnumeric() and len(occurrence) == 1
@@ -62,7 +58,7 @@ class Occurrences(JSONRecord):
                     save_occurrence.append(day_of_the_month)
                 else:
                     return False
-            if last_day == True:
+            if last_day:
                 save_occurrence = ["Last Day"] + save_occurrence
             self.update_occurrence(None, save_occurrence)
         return True
@@ -108,9 +104,7 @@ class Schedule(JSONRecord):
                 if not self.schedule_info["occurrences"].validate_and_save_monthly_occurrence(occurrences):
                     raise Exception("Error: validate occurrence failed and didn't save for cadence type: monthly")
             elif cadence == "weekly":
-                print("here, in weekly ")
                 if not self.schedule_info["occurrences"].validate_and_save_weekly_occurrence(occurrences):
-                    print('returned false')
                     raise Exception("Error: validate occurrence failed and didn't save for cadence type: weekly")
             elif cadence == "daily":
                 if not self.schedule_info["occurrences"].validate_and_save_daily_occurrence(occurrences):
@@ -147,12 +141,12 @@ class Task:
         self.schedule = Schedule()
         self.is_complete = {}
         self.next_occurence = None
+        self.project = Project()
         self.parent_task = None
         self.task_dependencies = {}
-        self.project = Project()
-        self.goal = ""
-        self.habit = False
         self.related_tasks = {}  # this is for future use
+        self.goal = ""
+        self.habit = False  # this is for future use
         # determine how long it takes to complete related projects/tasks on average
         # to generate estimate for current project/task
         # self.time_spent = {date: timedelta} # this tracks how long I've spent on this task(s)
@@ -207,10 +201,10 @@ def find_task_entry_for_task_id(cursor, idx, operation_name="found", table_name=
 def update_task_entry_for_task_id(cursor, idx, entries: Task, operation_name="updated",
                                   table_name="todo_list"):
     update_entry = 'update todo_list ' \
-                   'set task_name = %s, created_on = %s, start_date = %s, end_date = %s, due_date = %s ' \
+                   'set task_name = %s, created_on = %s, schedule = %s ' \
                    'where idx = %s'
     data = (
-        entries.task_name, entries.created_on, entries.schedule.schedule_info["start_date"], entries.schedule.schedule_info["end_date"], entries.schedule.schedule_info["due_date"],
+        entries.task_name, entries.created_on, entries.schedule.to_json(),
         idx)
     cursor.execute(update_entry, data)
 
@@ -245,7 +239,7 @@ def get_task_entry_by_idx(idx):
         return None, err
     task_entry = Task()
     task_entry.unpack_records(record)
-    print("Info: got 1 record successfully from idx")
+    print("Info: got 1 record successfully from idx: {}".format(idx))
     return task_entry, None
 
 
@@ -297,10 +291,9 @@ if __name__ == "__main__":
 
     task = Task()
     today = date.today()
-    err = task.schedule.validate_occurrence("yearly", [today])
+    err = task.schedule.validate_occurrence("weekly", ["Monday", "Wednesday", "Friday"])
     if err is not None:
         print("{}".format(err))
-    task.schedule.schedule_info["start_date"] = today
 
     # todo: what happens if i postpone a weekly cadence to tomorrow?
     if insert_task("leetcode") is not None:
