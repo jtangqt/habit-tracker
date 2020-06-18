@@ -1,9 +1,8 @@
 import calendar
 from datetime import timedelta, time, date
 import datetime
-import pytz
+import json
 
-from enum_helper import XEnum
 from postgres import with_postgres_connection
 from json_record import JSONRecord
 
@@ -25,7 +24,7 @@ class Occurrences:
     def is_numeric_occurrence(self, occurrence):
         if isinstance(occurrence[0], datetime.date):
             return False
-        return occurrence[0].isnumeric() and len(occurrence) == 1
+        return isinstance(occurrence[0], int) and len(occurrence) == 1
 
     def validate_and_save_once_occurrence(self, occurrences):  # occurrences looks like [datetime]
         if len(occurrences) > 1 and not isinstance(occurrences[0], datetime.date):
@@ -59,7 +58,7 @@ class Occurrences:
                 else:
                     return False
             if last_day:
-                save_occurrence = ["Last Day"] + save_occurrence
+                save_occurrence += ["Last Day"]
             self.update_occurrence(None, save_occurrence)
         return True
 
@@ -68,7 +67,7 @@ class Occurrences:
             self.update_occurrence(occurrences[0], [])
             return True
         else:
-            week_days_dict = { i : 0 for i in calendar.day_name }
+            week_days_dict = {i: 0 for i in calendar.day_name}
             for day_of_the_week in occurrences:
                 if day_of_the_week not in week_days_dict:
                     return False
@@ -76,9 +75,17 @@ class Occurrences:
         return True
 
     def validate_and_save_daily_occurrence(self, occurrences):
-        if len(occurrences) > 0:
+        if occurrences is not None:
             return False
         return True
+
+
+# def date_range(start, end, intv):
+#     diff = (end - start) / intv
+#     dates = []
+#     for i in range(intv):
+#         dates.append((start + diff * i))
+#     return dates
 
 
 class Schedule(JSONRecord):
@@ -120,8 +127,69 @@ class Schedule(JSONRecord):
         if err is not None:
             return err
         self.schedule_info["cadence"] = cadence
-        self.schedule_info["occurrences"] = occurrences
         # todo update start, end and due date
+
+    def get_next_occurrence(self):
+        if self.schedule_info["cadence"] == "once":
+            return self.schedule_info["occurrences"].dates[0]
+
+        elif self.schedule_info["cadence"] == "yearly":
+            for date in self.schedule_info["occurrences"].dates:
+                new_date = datetime.date(date.year, date.month, date.day)
+                if new_date > datetime.date.today():
+                    return new_date
+            for date in self.schedule_info["occurrences"].dates:
+                new_date = datetime.date(date.year + 1, date.month, date.day)
+                if new_date > datetime.date.today():
+                    return new_date
+
+        elif self.schedule_info["cadence"] == "monthly":
+            month = datetime.date.today().month
+            year = datetime.date.today().year
+            month_range = calendar.monthrange(year, month)[1]
+            for day in self.schedule_info["occurrences"].dates:
+                if isinstance(day, int) and day < month_range:
+                    next_date = datetime.date(year, month, day)
+                else:
+                    next_date = datetime.date(year, month, month_range)
+                if next_date > datetime.date.today():
+                    return next_date
+            # this is for next month
+            for day in self.schedule_info["occurrences"].dates:
+                next_month = month + 1
+                if next_month > 12:
+                    next_month = 1
+                month_range = calendar.monthrange(year, next_month)[1]
+                if isinstance(day, int) and day < month_range:
+                    day = datetime.date(year, month + 1, day)
+                else:
+                    day = datetime.date(year, month + 1, month_range)
+                if day > datetime.date.today():
+                    return day
+
+        elif self.schedule_info["cadence"] == "weekly":
+            today = datetime.date.today()
+            last_monday = today - datetime.timedelta(days=today.weekday())
+            weekdays = []
+            for i in range(14):
+                weekdays.append(last_monday + datetime.timedelta(days=i))
+            for day in self.schedule_info["occurrences"].dates:
+                index = list(calendar.day_name).index(day)
+                if weekdays[index + 7] > datetime.date.today():
+                    return weekdays[index + 7]
+            # for next week
+            for day in self.schedule_info["occurrences"].dates:
+                index = list(calendar.day_name).index(day)
+                if weekdays[index + 7] > datetime.date.today():
+                    return weekdays[index + 7]
+
+        elif self.schedule_info["cadence"] == "daily":
+            return datetime.date.today() + timedelta(days=1)
+
+        else:
+            raise Exception("Error: cadence does not exist: {}".format(self.schedule_info["cadence"]))
+
+        # todo: get next occurrence if it's a number
 
 
 class Project(JSONRecord):
@@ -133,6 +201,7 @@ class Project(JSONRecord):
         super().__init__(self.project_breakdown)
     # todo
 
+
 class Task:
     def __init__(self):
         self.idx = None
@@ -140,13 +209,14 @@ class Task:
         self.created_on = None
         self.schedule = Schedule()
         self.is_complete = {}
-        self.next_occurence = None
+        self.next_occurrence = None
         self.project = Project()
         self.parent_task = None
         self.task_dependencies = {}
         self.related_tasks = {}  # this is for future use
         self.goal = ""
         self.habit = False  # this is for future use
+        self.is_active = True
         # determine how long it takes to complete related projects/tasks on average
         # to generate estimate for current project/task
         # self.time_spent = {date: timedelta} # this tracks how long I've spent on this task(s)
@@ -163,6 +233,16 @@ class Task:
         # todo
         return None
 
+    def update_next_occurrence(self):  # takes a task and then changes the next occurrence date
+        print(type(self.schedule))
+        if self.next_occurrence not in self.is_complete:
+            self.next_occurrence = date.today()
+        else:
+            self.next_occurrence = self.schedule.get_next_occurrence()
+
+    def add_next_occurrence(self):
+        self.next_occurrence = self.schedule.get_next_occurrence()
+
 
 @with_postgres_connection
 def insert_row(cursor, task_name, operation_name="inserted", table_name="todo_list"):
@@ -172,7 +252,7 @@ def insert_row(cursor, task_name, operation_name="inserted", table_name="todo_li
 
 
 @with_postgres_connection
-def find_task_entries_for_task_name(cursor, task_name, operation_name="found (all)", table_name="todo_list"):
+def find_records_for_task_name(cursor, task_name, operation_name="found (all)", table_name="todo_list"):
     try:
         query = 'select * from todo_list where task_name = %s'
         cursor.execute(query, (task_name,))
@@ -185,7 +265,7 @@ def find_task_entries_for_task_name(cursor, task_name, operation_name="found (al
 
 
 @with_postgres_connection
-def find_task_entry_for_task_id(cursor, idx, operation_name="found", table_name="todo_list"):
+def find_record_for_task_id(cursor, idx, operation_name="found", table_name="todo_list"):
     try:
         query = 'select * from todo_list where idx = %s'
         cursor.execute(query, (idx,))
@@ -196,15 +276,28 @@ def find_task_entry_for_task_id(cursor, idx, operation_name="found", table_name=
         return None, error
     return record, None
 
+@with_postgres_connection
+def find_records_for_date(cursor, date, operation_name="found", table_name="todo_list"):
+    try:
+        query = 'select * from todo_list where next_occurrence = %s'
+        cursor.execute(query, (date,))
+        records = cursor.fetchall()
+        if records is None:
+            raise Exception("Error: record for date {} does not exist".format(date))
+    except (Exception, psycopg2.Error) as error:
+        return None, error
+    return records, None
+
 
 @with_postgres_connection
 def update_task_entry_for_task_id(cursor, idx, entries: Task, operation_name="updated",
                                   table_name="todo_list"):
+    print(entries.schedule, idx)
     update_entry = 'update todo_list ' \
-                   'set task_name = %s, created_on = %s, schedule = %s ' \
+                   'set task_name = %s, schedule = %s, is_complete = %s, next_occurrence = %s ' \
                    'where idx = %s'
     data = (
-        entries.task_name, entries.created_on, entries.schedule.to_json(),
+        entries.task_name, entries.schedule.to_json(), json.dumps(entries.is_complete), entries.next_occurrence,
         idx)
     cursor.execute(update_entry, data)
 
@@ -224,9 +317,17 @@ def delete_all_task_entries_for_task_name(cursor, task_name, operation_name="del
 def insert_task(task_name):
     return insert_row(task_name)
 
+def unpack_tasks(records):
+    tasks = []
+    for record in records:
+        task_entry = Task()
+        task_entry.unpack_records(record)
+        print("in unpack", task_entry.schedule)
+        tasks.append(task_entry)
+    return tasks
 
-def get_task_entries(task_name):
-    records, err = find_task_entries_for_task_name(task_name)
+def get_records_for_task_name(task_name):
+    records, err = find_records_for_task_name(task_name)
     if err is not None:
         return None, err
     print("Info: got {} record successfully from task name".format(len(records)))
@@ -234,17 +335,25 @@ def get_task_entries(task_name):
 
 
 def get_task_entry_by_idx(idx):
-    record, err = find_task_entry_for_task_id(idx)
+    record, err = find_record_for_task_id(idx)
     if err is not None:
         return None, err
-    task_entry = Task()
-    task_entry.unpack_records(record)
+    task_entry = unpack_tasks([record])[0]
     print("Info: got 1 record successfully from idx: {}".format(idx))
     return task_entry, None
 
 
+def get_tasks_for_date(date):
+    records, err = find_records_for_date(date)
+    if err is not None:
+        return None, err
+    tasks = unpack_tasks(records)
+    print("Info: got {} record successfully for date: {}".format(len(records), date))
+    return tasks, None
+
+
 def update_task_entry(task_name, task: Task):
-    records, err = find_task_entries_for_task_name(task_name)
+    records, err = find_records_for_task_name(task_name)
     if err is not None:
         return err
     indexes = {}
@@ -264,7 +373,7 @@ def update_task_entry(task_name, task: Task):
 
 
 def delete_task_entries(task_name):
-    records, err = find_task_entries_for_task_name(task_name)
+    records, err = find_records_for_task_name(task_name)
     if err is not None:
         return err
     indexes = {}
@@ -287,26 +396,46 @@ def delete_task_entries(task_name):
     return None
 
 
+def postpone_tasks_from_yesterday():
+    yesterday = datetime.date.today() - datetime.timedelta(days=1)
+    tasks, err = get_tasks_for_date(yesterday)
+    if err is not None:
+        return err
+    for task in tasks:
+        if not task.is_active and task.is_active is not None:
+            continue
+        task.update_next_occurrence()
+        print(task.schedule)
+        # todo work on this and fix postpone 
+        err = update_task_entry_for_task_id(task.idx, task)
+        if err is not None:
+            return err
+    return None
+
+
 if __name__ == "__main__":
 
     task = Task()
     today = date.today()
-    err = task.schedule.validate_occurrence("weekly", ["Monday", "Wednesday", "Friday"])
-    if err is not None:
-        print("{}".format(err))
+    # err = task.schedule.update_schedule("weekly", ["Thursday"]) # test weekly
+    # err = task.schedule.update_schedule("daily", None)  # test daily
+    # err = task.schedule.update_schedule("monthly", [0, 1, 17])  # test monthly
+    # if err is not None:
+    #     print("{}".format(err))
+    # task.add_next_occurrence()
 
-    # todo: what happens if i postpone a weekly cadence to tomorrow?
-    if insert_task("leetcode") is not None:
-        print("Error: insert in to-do list did not insert properly")
+    # if insert_task("leetcode") is not None:
+    #     print("Error: insert in to-do list did not insert properly")
+    # task.next_occurrence = datetime.date.today() - datetime.timedelta(days=1)
 
     err = update_task_entry("leetcode", task)
     if err is not None:
         print("{}".format(err))
 
-    err = task.schedule.update_schedule("weekly", ["Monday"])
-    if err is not None:
-        print("{}".format(err))
+    new_tasks = get_records_for_task_name("leetcode")
+    err = postpone_tasks_from_yesterday()
+    print("{}".format(err))
 
-    deleted_err = delete_task_entries("leetcode")
-    if deleted_err is not None:
-        print("{}".format(err))
+    # deleted_err = delete_task_entries("leetcode")
+    # if deleted_err is not None:
+    #     print("{}".format(err))
