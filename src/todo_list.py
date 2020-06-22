@@ -406,7 +406,7 @@ def postpone_tasks_from_yesterday():
             continue
         task.update_next_occurrence()
         print(task.schedule)
-        # todo work on this and fix postpone 
+        # todo work on this and fix postpone
         err = update_task_entry_for_task_id(task.idx, task)
         if err is not None:
             return err
