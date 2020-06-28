@@ -222,7 +222,6 @@ class Task:
         # self.time_spent = {date: timedelta} # this tracks how long I've spent on this task(s)
 
     def unpack_records(self, record):
-        # questions: how do you enforce one element is one of those types
         for i, key in enumerate(self.__dict__):
             if key == "schedule":
                 schedule = Schedule()
@@ -235,7 +234,6 @@ class Task:
         for i, key in enumerate(self.__dict__):
             if task.__dict__[key] is not None:
                 self.__dict__[key] = task.__dict__[key]
-        # todo
         return None
 
     def update_next_occurrence(self):  # takes a task and then changes the next occurrence date
