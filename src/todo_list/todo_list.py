@@ -1,8 +1,7 @@
-from datetime import  date
+from datetime import date
 from task import Task
 
-from todo_list_db import insert_row, find_task_entries_for_task_name, find_task_entry_for_task_id, \
-    update_task_entry_for_task_id, delete_task_entry_for_task_id, delete_all_task_entries_for_task_name
+from todo_list_db import *
 
 
 def insert_task(task_name):
